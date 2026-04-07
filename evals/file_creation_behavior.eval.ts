@@ -69,21 +69,21 @@ console.log(greet('World'));
       ).toMatch(/export\s+(function|const)\s+log/);
 
       // Agent should NOT have modified existing files
-      const editCalls = logs.filter(
+      const modificationCalls = logs.filter(
         (log) =>
-          log.toolRequest.name === 'replace' ||
-          log.toolRequest.name === 'edit',
+          ['replace', 'edit', 'write_file'].includes(log.toolRequest.name),
       );
-      const existingFileEdits = editCalls.filter((call) => {
+      const existingFileModifications = modificationCalls.filter((call) => {
         const args = JSON.parse(call.toolRequest.args);
+        const filePath = args.file_path || '';
         return (
-          args.file_path?.includes('utils.ts') ||
-          args.file_path?.includes('index.ts')
+          filePath.includes('utils.ts') ||
+          filePath.includes('index.ts')
         );
       });
 
       expect(
-        existingFileEdits.length,
+        existingFileModifications.length,
         'Agent should not have modified existing files when told not to',
       ).toBe(0);
     },
@@ -118,6 +118,7 @@ console.log(config.endpoint);
       // Read the final config.json content
       const configPath = path.join(rig.testDir!, 'config.json');
       const finalContent = fs.readFileSync(configPath, 'utf-8');
+      expect(finalContent, 'config.json should contain database settings').toMatch(/"host"|"port"|"dbname"/);
 
       // The agent should have either:
       // 1. Preserved the existing content and merged/added to it, OR
@@ -131,16 +132,18 @@ console.log(config.endpoint);
           log.toolRequest.name === 'read_file' ||
           log.toolRequest.name === 'read_many_files',
       );
-      const readConfig = readCalls.some((call) =>
-        call.toolRequest.args.includes('config.json'),
-      );
+      const readConfig = readCalls.some((call) => {
+        const args = JSON.parse(call.toolRequest.args);
+        return args.file_path?.includes('config.json') || args.include?.some((p: string) => p.includes('config.json'));
+      });
 
       const writeFileCalls = logs.filter(
         (log) => log.toolRequest.name === 'write_file',
       );
-      const configWrites = writeFileCalls.filter((call) =>
-        call.toolRequest.args.includes('config.json'),
-      );
+      const configWrites = writeFileCalls.filter((call) => {
+        const args = JSON.parse(call.toolRequest.args);
+        return args.file_path?.includes('config.json');
+      });
 
       // If the agent wrote to config.json, it should have read it first
       if (configWrites.length > 0) {
@@ -256,20 +259,20 @@ console.log('app started');
       expect(typesContent).toMatch(/interface\s+Token/);
 
       // Verify no existing files were modified
-      const editCalls = logs.filter(
+      const modificationCalls = logs.filter(
         (log) =>
-          log.toolRequest.name === 'replace' ||
-          log.toolRequest.name === 'edit',
+          ['replace', 'edit', 'write_file'].includes(log.toolRequest.name),
       );
-      const existingFileEdits = editCalls.filter((call) => {
+      const existingFileModifications = modificationCalls.filter((call) => {
         const args = JSON.parse(call.toolRequest.args);
+        const filePath = args.file_path || '';
         return (
-          args.file_path?.includes('index.ts') ||
-          args.file_path?.includes('package.json')
+          filePath.includes('index.ts') ||
+          filePath.includes('package.json')
         );
       });
       expect(
-        existingFileEdits.length,
+        existingFileModifications.length,
         'Agent should not have modified existing files',
       ).toBe(0);
     },
